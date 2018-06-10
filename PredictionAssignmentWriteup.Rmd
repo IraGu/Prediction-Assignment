@@ -1,0 +1,64 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Ira Gu"
+date: "June 9, 2018"
+output: 
+  html_document: 
+    keep_md: yes
+---
+# Background and Objective
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we will be to useing data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+All data were also taken from the website. The goal is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+### Cleaning the Data
+We read the data and remove any columns without values, then we remove any variables that are unrelated to movement since measurements in movement (gyroscope, magnetometer, acceleration) is the best indicator on whether an action (in this case a dumbell curl) is done correctly or not. We also removed total acceleration since x,y,z acceleration is already captured. This may speed up the training model while not affecting accuracy. 
+```{r}
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",na.strings = c("","#DIV0!","NA"))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",na.strings = c("","#DIV0!","NA"))
+library(dplyr)
+trainr <- training %>% select_if(~ !any(is.na(.)))
+testr <- testing %>% select_if(~ !any(is.na(.)))
+trainr<- trainr[, -grep("total", names(trainr))]
+testr<- testr[, -grep("total", names(testr))]
+trainr <- trainr[,8:length(trainr)]
+testr <- testr[,8:length(testr)]
+dim(trainr)
+dim(testr)
+table(training$classe)
+```
+
+### Cross validation 
+We split the data  into 2 training sets, testing and training, we will train the model on the training set and then only run the final model on the testing set once. We will be using caret to partition the data and train the models. We expect the out of sample error to be larger than the in sample error because we did not use any of the new data (test set) to train our models.This means its likely that we did not overfit our model. Small training set is used due to speed. 
+```{r}
+library(caret)
+inTrain <- createDataPartition(trainr$classe, p = 0.5, list = FALSE)
+trainp <- trainr[inTrain,]
+testp <- trainr[-inTrain,]
+dim(trainp)
+dim(testp)
+```
+
+### Running the training Random Forest Model (rf)
+```{r}
+mod1 <- train(classe ~., method ="rf", data = trainp, trControl = trainControl(method = "cv"), number = 3)
+pred <- predict(mod1, newdata = testp)
+confusionMatrix(pred, testp$classe)
+
+```
+
+### Running the Boosted Trees/Gradient Boosted Machine (gbm)
+```{r}
+mod2 <- train(classe~. , data = trainp, method = "gbm", verbose = FALSE)
+pred <- predict(mod1, newdata = testp)
+confusionMatrix(pred, testp$classe)
+
+```
+
+### Conclusion
+Looking at the results we can see that the performances of both 2 models are highly accurate. We will use gbm since it was slightly faster to calculate.
+
+We will use the gbm model for our final prediction.
+```{r}
+predict(mod2, newdata=testr)
+```
